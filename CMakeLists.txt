@@ -1,0 +1,20 @@
+cmake_minimum_required(VERSION 3.30.3)
+project(epollhttp)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED True)
+
+# Detect the platform and define a variable accordingly
+if(WIN32)
+    set(PLATFORM_NAME "Windows")
+    add_definitions(-DPLATFORM_WINDOWS)
+elseif(UNIX AND NOT APPLE)
+    set(PLATFORM_NAME "Unix")
+    add_definitions(-DPLATFORM_UNIX)
+elseif(APPLE)
+    set(PLATFORM_NAME "Mac")
+    add_definitions(-DPLATFORM_MAC)
+endif()
+
+add_subdirectory(tcpserver)
+add_subdirectory(tcpclient)
+add_subdirectory(examples)
