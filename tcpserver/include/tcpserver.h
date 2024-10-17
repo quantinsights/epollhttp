@@ -3,16 +3,17 @@
 
 #include <string>
 #include <memory>
+#include <unordered_map>
 
-class ClientState
+struct ClientState
 {
     public:
     #ifdef PLATFORM_WINDOWS
-        SOCKET client_socket;
+        SOCKET m_client_socket;
     #elif defined(PLATFORM_LINUX)
-        int client_socket;
+        int m_client_socket;
     #elif defined(PLATFORM_MAC)
-        SOCKET client_socket;
+        SOCKET m_client_socket;
     #endif
 
     std::string m_recv_buffer;
@@ -30,13 +31,22 @@ class ClientState
     std::string m_http_version;
 
 #ifdef PLATFORM_WINDOWS
-    ClientState() : client_socket{nullptr}, m_bytes_sent(0), m_waiting_for_send(false), m_waiting_for_Recv(false),
+    ClientState() : m_client_socket{nullptr}, m_bytes_sent(0), m_waiting_for_send(false), m_waiting_for_Recv(false),
+    m_is_recv_complete(false), m_is_header_complete(false) {}
+    
+    ClientState(int client_socket) : m_client_socket{client_socket}, m_bytes_sent(0), m_waiting_for_send(false), m_waiting_for_Recv(false),
     m_is_recv_complete(false), m_is_header_complete(false) {}
 #elif defined(PLATFORM_LINUX)
-    ClientState() : client_socket{-1}, m_bytes_sent(0), m_waiting_for_send(false), m_waiting_for_Recv(false),
+    ClientState() : m_client_socket{-1}, m_bytes_sent(0), m_waiting_for_send(false), m_waiting_for_Recv(false),
+    m_is_recv_complete(false), m_is_header_complete(false) {}
+
+    ClientState(int client_socket) : m_client_socket{client_socket}, m_bytes_sent(0), m_waiting_for_send(false), m_waiting_for_Recv(false),
     m_is_recv_complete(false), m_is_header_complete(false) {}
 #elif defined(PLATFORM_MAC)
-    ClientState() : client_socket{-1}, m_bytes_sent(0), m_waiting_for_send(false), m_waiting_for_Recv(false),
+    ClientState() : m_client_socket{-1}, m_bytes_sent(0), m_waiting_for_send(false), m_waiting_for_Recv(false),
+    m_is_recv_complete(false), m_is_header_complete(false) {}
+
+    ClientState(int client_socket) : m_client_socket{client_socket}, m_bytes_sent(0), m_waiting_for_send(false), m_waiting_for_Recv(false),
     m_is_recv_complete(false), m_is_header_complete(false) {}
 #endif
 

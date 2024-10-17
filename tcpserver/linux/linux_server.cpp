@@ -97,7 +97,7 @@ void LinuxServer::start()
     // which are read/write ready doesn't have to wait on accept(). It can be done together concurrently 
     // with accept()'ing connections off the pending queue.
     // So, we spawn a new thread to poll FDs.
-    m_epoll_thread = std::thread(&epollLoop, this);
+    m_epoll_thread = std::thread(&LinuxServer::epollLoop, this);
     m_epoll_thread.detach();
 
     while(true)
@@ -184,15 +184,18 @@ void LinuxServer::handleRecv(int client_socket)
     {
         m_client_state_map[client_socket] = ClientState(client_socket);
     }
+
+    auto& state = m_client_state_map[client_socket];
+
     const int buffer_size = 1024;
-    char recv_buffer[1024];
+    char recv_buffer[buffer_size];
     std::string data;
 
     int bytes_received = recv(client_socket, recv_buffer, 1024, 0);
 
     if(bytes_received > 0)
     {
-        
+        state.m_recv_buffer.append(recv_buffer);
     }
     else if(bytes_received == 0)
     {

@@ -13,7 +13,9 @@ set(SOURCES
     src/tcpserver.cpp
 )
 
+include_directories(include)
+
 # Add tcpserver.cpp
-add_library(tcpserver STATIC SOURCES ${OS_SPECIFIC_SRC})
+add_library(tcpserver STATIC src/tcpserver.cpp ${OS_SPECIFIC_SRC})
 
 target_include_directories(tcpserver PUBLIC ${MAKE_CURRENT_SOURCE_DIR}/include) 
