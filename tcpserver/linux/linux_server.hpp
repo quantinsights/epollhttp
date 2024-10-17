@@ -8,8 +8,10 @@
 #include <unistd.h>         // For close()
 #include <arpa/inet.h>      // For socket functions and structures
 #include <sys/socket.h>
-#include <fstream>          // For file I/O
+#include <sys/fcntl.h>
+#include <sys/epoll.h>
 #include <thread>
+#include <unordered_map>
 #include "../include/tcpserver.h"
 #include "../include/ctpl_stl.h"
 
@@ -22,6 +24,15 @@ class LinuxServer : public TCPServer
         std::thread m_epoll_thread;
         int m_epoll_fd;
         void epollLoop();
+        bool setSocketAsNonBlocking(int socked_id);
+        ctpl::thread_pool m_thread_pool;
+
+        //Use a map to store the state of each client
+        std::unordered_map<int, ClientState> m_client_state_map;
+
+        void handleRecv(int client_socket);
+        void handleSend(int client_socket);
+        void handleError(int client_socket);
     public:
         LinuxServer();
         virtual ~LinuxServer();

@@ -56,6 +56,26 @@ bool LinuxServer::initialize(int port, const std::string& ip_address)
     return true;
 }
 
+bool LinuxServer::setSocketAsNonBlocking(int client_socket)
+{
+    int flags = fcntl(client_socket, F_GETFL, 0);
+
+    if(flags == -1)
+    {
+        std::cout << "\nError getting socket flags." << std::endl;
+        return false;
+    }
+
+    flags |= O_NONBLOCK;
+    if(fcntl(client_socket, F_SETFL, 0) == -1)
+    {
+        std::cout << "\nError setting socket flags to O_NONBLOCK.";
+        return false;
+    }
+    std::cout << "\nSet socket id = " << client_socket << " to non-blocking mode.";
+    return true;
+}
+
 void LinuxServer::start()
 {
     // This while loop will handle multiple client connections. accept() is a blocking
@@ -63,9 +83,8 @@ void LinuxServer::start()
     // create a new socket with the same socket type protocol and address family as the specified socket, 
     // and allocate a new file descriptor for that socket. 
 
-    // We are going to create a separate thread for the epoll loop. epoll_wait() is a blocking call. So,
-    // our server thread should will not become busy on epoll_wait(), and is free to accept new connections from
-    // the connection-pending queue.
+    // This will return an epoll instance. We can think of this as a monitor object(a data-structure that the OS keeps)
+    // that maintains the monitoring list.  
 
     m_epoll_fd = epoll_create1(0);
     if(m_epoll_fd == -1)
@@ -73,7 +92,14 @@ void LinuxServer::start()
         std::cout << "\nFailed to create epoll. errno : " << errno;
         return;
     }
-    
+
+    // accept() is a blocking call. The work of polling FDs and returning those
+    // which are read/write ready doesn't have to wait on accept(). It can be done together concurrently 
+    // with accept()'ing connections off the pending queue.
+    // So, we spawn a new thread to poll FDs.
+    m_epoll_thread = std::thread(&epollLoop, this);
+    m_epoll_thread.detach();
+
     while(true)
     {
         // 5. Accept a connection from the client
@@ -87,13 +113,107 @@ void LinuxServer::start()
 
         std::cout << "\nConnection accepted.";
 
-        // Submit the client handling task to the thread pool.
-        //pool.push(handle_client, client_socket);
+        if(!setSocketAsNonBlocking(client_socket))
+        {
+            std::cout << "\nClosing client socket " << client_socket;
+            close(client_socket);
+            continue;
+        }
+
+        // An epoll_ctl() will allow us to add, modify and delete file-descriptors from the epoll instance.
+        // When you add a file descriptor, you store struct epoll_event instance that later you receive 
+        // when the file descriptor has something new to process.
+
+        // Level-triggered(LT) epoll will keep notifying you as long as the FD remains read or write ready, whereas
+        // with edge-triggered(ET), only one notification is set for the FD, when the data is there. 
+
+        struct epoll_event ev;
+        ev.events = EPOLLIN | EPOLLOUT | EPOLLET;
+        ev.data.fd = client_socket;
+        epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, client_socket, &ev);
+
     }
 }
 
+/*
+* Keep polling FDs to see which ones are read/write-ready
+*/
 void LinuxServer::epollLoop()
 {
+    const int max_events = 8;
+    struct epoll_event events[max_events];
+
+    while(true)
+    {
+        // The events parameter is a buffer that will contain triggered events.
+        int event_count = epoll_wait(m_epoll_fd, events, max_events, -1);   //Blocking call
+        for(int i{0}; i < event_count; ++i)
+        {
+            int client_socket = events[i].data.fd;
+            
+            if(events[i].events & EPOLLIN)
+            {
+                m_thread_pool.push([this, client_socket](int thread_id){
+                    this->handleRecv(client_socket);
+                });
+            }
+            else if(events[i].events & EPOLLOUT)
+            {
+                m_thread_pool.push([this, client_socket](int thread_id){
+                    this->handleSend(client_socket);
+                });
+            }
+            else if(events[i].events & EPOLLERR)
+            {
+                m_thread_pool.push([this, client_socket](int thread_id){
+                    this->handleError(client_socket);
+                });
+            }
+        }
+    }
+}
+
+void handleSend(int client_socket)
+{
+
+}
+
+void LinuxServer::handleRecv(int client_socket)
+{
+    if(m_client_state_map.find(client_socket) == m_client_state_map.end())
+    {
+        m_client_state_map[client_socket] = ClientState(client_socket);
+    }
+    const int buffer_size = 1024;
+    char recv_buffer[1024];
+    std::string data;
+
+    int bytes_received = recv(client_socket, recv_buffer, 1024, 0);
+
+    if(bytes_received > 0)
+    {
+        
+    }
+    else if(bytes_received == 0)
+    {
+        std::cout << "\nClient closed the connection";
+        close(client_socket);
+        return;
+    }
+    else if(bytes_received < 0)
+    {
+        if(errno != EWOULDBLOCK && errno != EAGAIN)
+        {
+            // An error has occurred
+            std::cout << "\nAn error has occurred during recv() for socket " << client_socket;
+            close(client_socket);
+            return;
+        }else
+        {
+            // More data to receive
+            return;
+        }
+    }
 
 }
 
